@@ -22,12 +22,6 @@
   --ok: #3ecf8e; --warn: #f0b429; --bad: #ff5c5c; --chip: #1a2434;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-:root[data-theme="light"] {
-  color-scheme: light;
-  --bg: #f3f6fa; --card: #ffffff; --card-2: #fafcfe; --ink: #18212d; --muted: #5d6b7e;
-  --line: #dde4ec; --accent: #1f7ae0; --accent-soft: rgba(31, 122, 224, .10);
-  --ok: #138a59; --warn: #a86b00; --bad: #d63535; --chip: #edf2f7;
-}
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--sans); -webkit-text-size-adjust: 100%; }
@@ -119,8 +113,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 6
   const GSM = { 0: "module off / fault", 1: "no SIM", 2: "searching", 3: "registered" };
   const LOC = { 1: "live", 2: "last known", 3: "demo position" };
 
-  /* ---- theme follows Telegram (dark when unknown) ---- */
-  if (tg && tg.colorScheme === "light") document.documentElement.setAttribute("data-theme", "light");
+  /* ---- fixed dark theme (same look as the portal and dashboard), whatever Telegram uses ---- */
 
   /* ---- snapshot from ?s= (base64url JSON) ---- */
   function decode(s) {
@@ -141,7 +134,11 @@ footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 6
   try { history.replaceState(null, "", location.pathname); } catch (e) { /* not allowed: harmless */ }
 
   const inTelegram = !!(tg && typeof tg.sendData === "function" && tg.platform && tg.platform !== "unknown");
-  if (tg) { try { tg.ready(); tg.expand(); } catch (e) { /* old client */ } }
+  if (tg) {
+    try { tg.ready(); tg.expand(); } catch (e) { /* old client */ }
+    try { tg.setHeaderColor("#0a0e15"); tg.setBackgroundColor("#0a0e15"); } catch (e) { /* Bot API < 6.1 */ }
+    try { tg.setBottomBarColor("#0a0e15"); } catch (e) { /* Bot API < 7.10 */ }
+  }
 
   function hm(epoch) {
     if (!epoch) return "--:--";
