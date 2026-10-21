@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>VODAS</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23111825'/%3E%3Cpath d='M6.3 17.7a8 8 0 0 1 0-11.4M17.7 6.3a8 8 0 0 1 0 11.4M9.2 14.8a4 4 0 0 1 0-5.6M14.8 9.2a4 4 0 0 1 0 5.6' fill='none' stroke='%234da3ff' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='12' r='1.5' fill='%234da3ff'/%3E%3C/svg%3E">
+<!--
+  VODAS Telegram Mini App M1 (Spec 08 v2.0, ADR-063). Opened from the "📱 VODAS" reply-keyboard button the
+  bot sends after /app. Shows the snapshot carried in ?s=<base64url JSON> (taken by the STM32, no coordinates,
+  contacts or secrets) and sends one command with Telegram.WebApp.sendData(); the page then closes and the
+  answer arrives in the chat. The page decides nothing: the STM32 checks sender, session, age and rights.
+  One file; the only external resource is Telegram's own script (required by Telegram).
+-->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0a0e15; --card: #111825; --card-2: #0e141f; --ink: #dde5ee; --muted: #7c8ba0;
+  --line: #1e2836; --accent: #4da3ff; --accent-soft: rgba(77, 163, 255, .14);
+  --ok: #3ecf8e; --warn: #f0b429; --bad: #ff5c5c; --chip: #1a2434;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f6fa; --card: #ffffff; --card-2: #fafcfe; --ink: #18212d; --muted: #5d6b7e;
+  --line: #dde4ec; --accent: #1f7ae0; --accent-soft: rgba(31, 122, 224, .10);
+  --ok: #138a59; --warn: #a86b00; --bad: #d63535; --chip: #edf2f7;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--sans); -webkit-text-size-adjust: 100%; }
+main { max-width: 560px; margin: 0 auto; padding: 12px 14px calc(20px + env(safe-area-inset-bottom, 0px)); }
+header { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; }
+.mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; color: var(--accent);
+  background: var(--accent-soft); border: 1px solid var(--accent); flex: 0 0 auto; }
+header h1 { margin: 0; font-size: 16px; letter-spacing: 2px; }
+header small { display: block; color: var(--muted); font-size: 12px; letter-spacing: 0; }
+.badge { margin-left: auto; padding: 4px 11px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: var(--chip); border: 1px solid var(--line); white-space: nowrap; }
+.badge.ok { color: var(--ok); border-color: var(--ok); }
+.badge.warn { color: var(--warn); border-color: var(--warn); }
+.badge.bad { color: var(--bad); border-color: var(--bad); }
+section { background: linear-gradient(180deg, var(--card), var(--card-2)); border: 1px solid var(--line);
+  border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+h2 { margin: 0 0 8px; font-size: 11.5px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; }
+.kv span:nth-child(odd) { color: var(--muted); }
+.kv b { font-weight: 600; }
+.emg { border-color: var(--bad); background: linear-gradient(180deg, rgba(255, 92, 92, .16), rgba(255, 92, 92, .06)); }
+.emg h2 { color: var(--bad); }
+.note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+.stale { border-color: var(--warn); color: var(--warn); font-size: 13.5px; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+button { font: 600 15px var(--sans); padding: 12px 10px; min-height: 46px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--chip); color: var(--ink); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { background: var(--bad); border-color: var(--bad); color: #fff; grid-column: 1 / -1; }
+button:disabled { opacity: .45; cursor: default; }
+.wide { grid-column: 1 / -1; }
+footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="mark" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6.3 17.7a8 8 0 0 1 0-11.4M17.7 6.3a8 8 0 0 1 0 11.4M9.2 14.8a4 4 0 0 1 0-5.6M14.8 9.2a4 4 0 0 1 0 5.6"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg></div>
+    <div><h1>VODAS</h1><small id="vid">–</small></div>
+    <span class="badge" id="state">–</span>
+  </header>
+
+  <section class="emg" id="emg" hidden>
+    <h2>Emergency</h2>
+    <div>Someone may be inside the vehicle. Acknowledge to tell the others you are handling it.</div>
+  </section>
+
+  <section class="stale" id="stale" hidden></section>
+
+  <section>
+    <h2>Vehicle</h2>
+    <div class="kv">
+      <span>Status</span><b id="fsm">–</b>
+      <span>Mode</span><b id="mode">–</b>
+      <span>Battery</span><b id="volt">–</b>
+      <span>Radar</span><b id="radar">–</b>
+      <span>Location</span><b id="loc">–</b>
+      <span>Last AI check</span><b id="ai">–</b>
+      <span>Mobile network</span><b id="gsm">–</b>
+    </div>
+    <p class="note" id="age">–</p>
+  </section>
+
+  <section id="actions">
+    <h2>Actions</h2>
+    <div class="btns">
+      <button class="danger" id="bAck" hidden>Acknowledge alert</button>
+      <button class="primary" id="bRefresh">Refresh</button>
+      <button id="bLoc">Send location</button>
+      <button id="bPhoto">Take photo</button>
+      <button id="bDrv">I'm the driver</button>
+      <button id="bOn" hidden>Mode ON (scan now)</button>
+      <button id="bAuto" hidden>Mode AUTO</button>
+    </div>
+    <p class="note" id="hint">The page closes after each action; the answer and a new VODAS button arrive in the chat.</p>
+  </section>
+
+  <footer id="foot"></footer>
+</main>
+<script>
+"use strict";
+(function () {
+  const $ = id => document.getElementById(id);
+  const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+  const STALE_S = 100; // the device keeps a session 120 s; leave time for the trip back
+  const FSM = ["Starting", "Driving", "Confirming park", "Monitoring", "Monitoring", "Monitoring (camera)",
+               "Monitoring", "Safe", "EMERGENCY", "Acknowledged, monitoring"];
+  const RADAR = { 0: "off (between scans)", 1: "nobody", 2: "moving target", 3: "still target", 4: "moving + still target", 255: "not responding" };
+  const GSM = { 0: "module off / fault", 1: "no SIM", 2: "searching", 3: "registered" };
+  const LOC = { 1: "live", 2: "last known", 3: "demo position" };
+
+  /* ---- theme follows Telegram (dark when unknown) ---- */
+  if (tg && tg.colorScheme === "light") document.documentElement.setAttribute("data-theme", "light");
+
+  /* ---- snapshot from ?s= (base64url JSON) ---- */
+  function decode(s) {
+    let b = s.replace(/-/g, "+").replace(/_/g, "/");
+    while (b.length % 4) b += "=";
+    const bin = atob(b);
+    let text = "";
+    for (let i = 0; i < bin.length; i++) text += String.fromCharCode(bin.charCodeAt(i) & 0xff);
+    return JSON.parse(text); // the device sends ASCII only
+  }
+  let snap = null, error = "";
+  try {
+    const raw = new URLSearchParams(location.search).get("s");
+    if (!raw) error = "No vehicle data. Open the VODAS button in the chat with the bot.";
+    else snap = decode(raw);
+    if (snap && snap.v !== 1) { error = "This page is older than the device. Close it and send /app again."; snap = null; }
+  } catch (e) { error = "The vehicle data could not be read. Send /app to get a new button."; snap = null; }
+  try { history.replaceState(null, "", location.pathname); } catch (e) { /* not allowed: harmless */ }
+
+  const inTelegram = !!(tg && typeof tg.sendData === "function" && tg.platform && tg.platform !== "unknown");
+  if (tg) { try { tg.ready(); tg.expand(); } catch (e) { /* old client */ } }
+
+  function hm(epoch) {
+    if (!epoch) return "--:--";
+    const d = new Date(epoch * 1000);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  }
+  function ago(epoch) {
+    const s = Math.round(Date.now() / 1000 - epoch);
+    if (s < 60) return "just now";
+    if (s < 3600) return Math.round(s / 60) + " min ago";
+    return Math.round(s / 3600) + " h ago";
+  }
+  function set(id, text) { $(id).textContent = text; }
+
+  /* ---- render ---- */
+  const buttons = ["bAck", "bRefresh", "bLoc", "bPhoto", "bDrv", "bOn", "bAuto"];
+  function lock(all) { buttons.forEach(id => { $(id).disabled = all; }); }
+
+  if (!snap) {
+    set("state", "no data");
+    $("state").className = "badge warn";
+    set("fsm", error);
+    $("actions").hidden = true;
+  } else {
+    const vm = snap.vm | 0;
+    const hasTime = (vm & 1) && snap.t > 0;
+    const age = hasTime ? (Date.now() / 1000 - snap.t) : Infinity;
+    const isStale = !hasTime || !snap.sid || /^0+$/.test(snap.sid) || age > STALE_S;
+    const st = snap.st | 0;
+
+    set("vid", snap.vid || "vehicle");
+    set("state", st === 8 ? "EMERGENCY" : st === 9 ? "Acknowledged" : st === 7 ? "Safe" : st === 1 ? "Driving" : "Monitoring");
+    $("state").className = "badge " + (st === 8 ? "bad" : st === 9 ? "warn" : "ok");
+    set("fsm", (FSM[st] || "unknown") + ((snap.ph | 0) > 0 && st >= 3 && st <= 6 ? " · phase " + snap.ph + ", cycle " + snap.cy : ""));
+    set("mode", snap.m ? "ON (scanning on request)" : "AUTO (follows the engine)");
+    set("volt", (vm & 2) ? (snap.mv / 1000).toFixed(2) + " V" + (snap.bl ? " · LOW" : "") : "no reading");
+    set("radar", (vm & 4) ? (RADAR[snap.rs] || "unknown") + ((snap.rs >= 2 && snap.rs <= 4 && snap.rd) ? " · " + snap.rd + " cm" : "") : "unknown");
+    set("loc", (vm & 8) && LOC[snap.ls] ? LOC[snap.ls] + (snap.lt ? " · " + hm(snap.lt) : "") : "no position yet");
+    if ((vm & 16) && snap.ca === 0) {
+      set("ai", (snap.cc === 0 ? "person / pet " : "empty ") + snap.cf + "%" + (snap.ct ? " · " + hm(snap.ct) : "") + (snap.stub ? " (AI stub)" : ""));
+    } else if ((vm & 16) && snap.ca === 1) {
+      set("ai", "camera failed" + (snap.ct ? " · " + hm(snap.ct) : ""));
+    } else {
+      set("ai", "no data yet" + (snap.stub ? " (AI stub)" : ""));
+    }
+    set("gsm", GSM[snap.g] !== undefined ? GSM[snap.g] : "unknown");
+    set("age", hasTime ? "Status from " + hm(snap.t) + " (" + ago(snap.t) + ")" : "Status time unknown (device clock not synced)");
+    set("foot", (snap.dev || "") + (snap.ai ? " · AI " + snap.ai : ""));
+
+    $("emg").hidden = !(snap.a > 0);
+    $("bAck").hidden = !(snap.a > 0);
+    const canMode = ((snap.r | 0) & 3) !== 0;
+    $("bOn").hidden = !canMode || !!snap.m;
+    $("bAuto").hidden = !canMode || !snap.m;
+
+    if (!inTelegram) {
+      lock(true);
+      $("stale").hidden = false;
+      set("stale", "Read-only: open this page from the VODAS button in the Telegram chat to send commands.");
+    } else if (isStale) {
+      ["bPhoto", "bDrv", "bOn", "bAuto"].forEach(id => { $(id).disabled = true; });
+      $("stale").hidden = false;
+      set("stale", "This screen is out of date. Tap Refresh to get a new one (photo, driver and mode need a fresh screen).");
+    }
+  }
+
+  /* ---- commands: "v1 <rid> <sid> <cfg_seq> <op> [arg]" (Spec 08 s4.2) ---- */
+  function rid() {
+    const a = new Uint32Array(1);
+    (window.crypto || window.msCrypto).getRandomValues(a);
+    return ("00000000" + a[0].toString(16)).slice(-8);
+  }
+  let sent = false;
+  function send(op) {
+    if (sent || !snap || !inTelegram) return;
+    const sid = /^[0-9a-f]{16}$/.test(snap.sid || "") ? snap.sid : "0000000000000000";
+    const cs = Number.isInteger(snap.cs) && snap.cs >= 0 ? snap.cs : 0;
+    const text = "v1 " + rid() + " " + sid + " " + cs + " " + op;
+    if (text.length > 160) return;
+    sent = true;
+    lock(true);
+    try { tg.HapticFeedback && tg.HapticFeedback.impactOccurred("light"); } catch (e) { /* optional */ }
+    tg.sendData(text); // Telegram closes the page
+  }
+  function confirmThen(msg, op) {
+    if (tg && typeof tg.showConfirm === "function") {
+      try { tg.showConfirm(msg, ok => { if (ok) send(op); }); return; } catch (e) { /* old client */ }
+    }
+    send(op);
+  }
+  $("bRefresh").onclick = () => send("r");
+  $("bLoc").onclick = () => send("loc");
+  $("bAck").onclick = () => send("ack " + (snap.a | 0));
+  $("bPhoto").onclick = () => send("photo");
+  $("bDrv").onclick = () => confirmThen("Become the current driver? Alerts will come to you first.", "drv");
+  $("bOn").onclick = () => confirmThen("Start scanning now (mode ON)?", "mode on");
+  $("bAuto").onclick = () => confirmThen("Return to AUTO (follow the engine and motion)?", "mode auto");
+})();
+</script>
+</body>
+</html>
