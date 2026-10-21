@@ -193,6 +193,10 @@ footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 6
     const canMode = ((snap.r | 0) & 3) !== 0;
     $("bOn").hidden = !canMode || !!snap.m;
     $("bAuto").hidden = !canMode || !snap.m;
+    if (st <= 1) { // the device refuses photos while starting or driving (Spec 08 s4.4)
+      $("bPhoto").disabled = true;
+      $("bPhoto").textContent = "Photo: parked only";
+    }
 
     if (!inTelegram) {
       lock(true);
